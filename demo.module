@@ -1,0 +1,237 @@
+<?php
+/**
+ * @file
+ * Entity Demo moudle.
+ * File adding code for defining custom entity. 
+ */
+
+/**
+ * Implements hook_menu().
+ */
+function demo_menu() {
+  /*
+   *$items['blog'] = array(
+   *  'title' => 'blogs',
+   *  'page callback' => 'blog_page',
+   *  'access arguments' => array('access content'),
+   *  'type' => MENU_SUGGESTED_ITEM,
+   *);
+   */
+  $items['project/demo'] = array(
+    'title' => 'Demo - project with custom entity',
+    'page callback' => 'demo_demo_page',
+    'page arguments' => array(),
+    'access arguments' => array('access content'),
+    'type' => MENU_NORMAL_ITEM,
+  );
+  $items['project/%'] = array(
+    'title' => 'Project',
+    'page callback' => 'demo_view_project',
+    'page arguments' => array(1),
+    'access arguments' => array('access content'),
+  );
+  return $items;
+}
+
+/**
+ * Implements hook_entity_info().
+ */
+function demo_entity_info() {
+
+  $info = array();
+
+  $info['project'] = array(
+    'label' => t('Project'),
+    'base table' => 'demo_projects',
+    'entity keys' => array(
+      'id' => 'id',
+      'label' => 'name',
+    ),
+    'module' => 'demo',
+    // 'entity class' => 'Entity',
+    'entity class' => 'ProjectEntity',
+    'controller class' => 'ProjectEntityController',
+    // below three lines are for admin gui provided by entity api module.
+    /*
+    With these modification, we do 4 things:
+
+    1. We specify an access callback function for the entity type. We’ll need this for the admin UI and we’ll declare the callback function in a minute.
+    2. We set the uri callback to the default one provided by the entity class (I will come back to this at point 4).
+    3. We set the admin ui information: path to the UI page and the controller class that will handle it. EntityDefaultUIController is the default UI class that comes with Entity API and it is declared in the entity.ui.inc file.
+    4. We change the name of the entity class for this entity type to one that does not exist yet. We will create it now by extending the previous one so that we can override its defaultUri() method:
+     */
+    'access callback' => 'demo_access_callback',
+    'uri callback' => 'entity_class_uri',
+    'admin ui' => array(
+      'path' => 'admin/projects',
+      'controller class' => 'EntityDefaultUIController',
+    ),
+    'fieldable' => TRUE,
+    'bundles' => array(
+      'project' => array(
+        'label' => t('Project'),
+        'admin' => array(
+          'path' => 'admin/projects',
+        ),
+      ),
+    ),
+    // add views handler class to expose custom project entity to views. This class is provided by entity api module.
+    'views controller class' => 'EntityDefaultViewsController',
+  );
+
+  return $info;
+}
+
+function demo_demo_page(){
+  // $projects = entity_load('project', array(1, 2));
+  // dpm($projects);
+  // return 'Some string';
+  
+  // $projects = entity_load('project', array(1, 2, 3));
+
+  //  if (!isset($projects[3])) {
+  //    $entity = entity_create('project', array('id' => 3));
+  //    $entity->name = t('Spring House');
+  //    $entity->description = t('Some more lipsum.');
+  //    $entity->save();
+  //  }
+
+  //  dpm($projects);
+
+  //  return 'Some string';
+  
+  $projects = entity_load('project', array(1, 2, 3));
+
+  $list = entity_view('project', $projects);
+  $output = array();
+
+  foreach ($list['project'] as $project) {
+    $output[] = drupal_render($project);
+  }
+  drupal_set_title('Only first 3 projects');
+  return implode($output);
+}
+
+/**
+ * Callback function for displaying the individual project page
+ */
+function demo_view_project($id) {
+  if(is_numeric($id)){
+    $projects = entity_load('project', array($id));
+    $project = $projects[$id];
+
+    drupal_set_title($project->name);
+    $output = entity_view('project', array($project));
+
+    return $output;
+  }
+  return 'No entity for this id';
+}
+
+/**
+ * Access callback for project entities.
+ */
+function demo_access_callback($op, $project = NULL, $account = NULL) {
+  if ($op == 'view' || $op == 'update' || $op == 'create' || $op == 'delete') {
+    return TRUE;
+  }
+  else {
+    return FALSE;
+  }
+}
+
+/**
+ * Form definition for adding / editing a project.
+ * 
+ */
+/*
+ A few things you should keep in mind though. In order for the Entity API to pick up automatically on the fact that this is the form for the project entities, the declaring function name needs to be exactly that. If the entity type was called chocolate, the function name would have been chocolate_form(). You’ll also notice that we pass the $project entity as a third parameter. This will be handled by the Entity API for the edit form. And finally, in the submit handler, you notice the use of the entity_ui_form_submit_build_entity() function. This is a great helper that will take all the values from the $form_state array (the user input) and populate the entity properties with them.
+ */
+function project_form($form, &$form_state, $project = NULL) {
+
+  $form['name'] = array(
+    '#title' => t('Project name'),
+    '#type' => 'textfield',
+    '#default_value' => isset($project->name) ? $project->name : '',
+    '#required' => TRUE,
+  );
+
+  $form['description'] = array(
+    '#title' => t('Project description'),
+    '#type' => 'textarea',
+    '#default_value' => isset($project->description) ? $project->description : '',
+    '#required' => TRUE,
+  );
+
+  $form['deadline'] = array(
+    '#title' => t('Project deadline'),
+    '#type' => 'textfield',
+    '#default_value' => isset($project->deadline) ? $project->deadline : '',
+    '#required' => TRUE,
+  );  
+
+  field_attach_form('project', $project, $form, $form_state);
+
+  $form['submit'] = array(
+    '#type' => 'submit', 
+    '#value' => isset($project->id) ? t('Update project') : t('Save project'),
+    '#weight' => 50,
+  );
+
+  return $form;
+}
+
+/**
+ * Submit handler for the project add/edit form.
+ */
+function project_form_submit($form, &$form_state) {
+  $project = entity_ui_form_submit_build_entity($form, $form_state);
+  $project->save();
+  drupal_set_message(t('The project: @name has been saved.', array('@name' => $project->name)));
+  $form_state['redirect'] = 'admin/projects';
+}
+
+/**
+ * Implements hook_entity_property_info().
+ */
+/*
+One thing to note is that Views cannot interpret the kind of values we are storing in those properties. The deadline field, for instance, is actually a date and not a simple integer. So if you add that field, it will treat it as a simple numeric value.
+
+To fix this, we need to implement hook_entity_property_info() and specify exactly what kind of data the project properties are storing:
+
+As you can see, it’s a big nested array situation in which for the project entity we map its properties to their schema column and specify what type of data is found there. Now if you clear the cache and add these fields in your View, Views will know what values are stored in the properties. For the deadline field, it will use its date handler this time and transform the timestamp into a date string for us.
+
+An important thing to keep in mind when implementing this hook: you cannot do it only for one property. As soon as you implemented and described one of your properties, you need to add the rest as well. Otherwise Views won’t show the rest at all anymore.
+ */
+function demo_entity_property_info() {
+
+  $info = array();
+
+  $info['project']['properties']['id'] = array(
+    'label' => t('Project ID'),
+    'description' => t('The ID of the project.'),
+    'type' => 'integer',
+    'schema field' => 'id',
+  );
+
+  $info['project']['properties']['name'] = array(
+    'label' => t('Project name'),
+    'description' => t('Name of the project.'),
+    'type' => 'text',
+    'schema field' => 'name',
+  );
+  $info['project']['properties']['description'] = array(
+    'label' => t('Project description'),
+    'description' => t('Description of the project.'),
+    'type' => 'text',
+    'schema field' => 'description',
+  );
+  $info['project']['properties']['deadline'] = array(
+    'label' => t('Deadline'),
+    'description' => t('Project deadline.'),
+    'type' => 'date',
+    'schema field' => 'deadline',
+  );
+
+  return $info;
+}
